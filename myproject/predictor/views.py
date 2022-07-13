@@ -68,6 +68,7 @@ def predictor(request):
             # root_dir = "tempDir"
             per_prob = ""
             if not request.session.has_key("pc-id"):
+                request.session.flush()
                 uuid = str(uuid4())
                 request.session["pc-id"] = uuid
                 request.session.set_expiry(0)
@@ -91,19 +92,18 @@ def predictor(request):
 @api_view(["POST"])
 def clearSession(request):
     res = {
-        "clearSessionFlag": False
+        "error": True
     }
     try:
         if request.method == "POST":
             if request.session.has_key("pc-id"):
                 pc_id = request.session["pc-id"]
                 dir = ospath.join(settings.MEDIA_ROOT, ROOT_DIR, pc_id)
-                print(dir)
                 system(f"rm -rf {dir}")
                 request.session.flush()
-                res["clearSessionFlag"] = True
+                res["error"] = False
 
     except Exception as e:
         return Response({**res, "msg": "Server Side Error"}, status=status.HTTP_403_FORBIDDEN)
 
-    return Response({**res, "msg": "cleared"}, status=status.HTTP_200_OK)
+    return Response({**res, "msg": "Cleared"}, status=status.HTTP_200_OK)
