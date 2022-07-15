@@ -1,3 +1,5 @@
+import io
+from operator import index
 from textwrap import indent
 from tracemalloc import start
 from uuid import uuid4
@@ -13,6 +15,7 @@ from .prediction import Predictor
 import pandas as pd
 from django.views.decorators.csrf import csrf_exempt
 import json
+import csv
 
 
 # Create your views here.
@@ -34,7 +37,7 @@ def get_text(files_names):
         yield "".join([str(page.get_text()) for page in doc])
 
 
-def predict_per(file_names):
+def predict_per(file_names, dir):
     actual_personality = {
         'I': "Introvert",
         'E': "Extrovert",
@@ -49,12 +52,14 @@ def predict_per(file_names):
     __pd_structure.update({value: pd.Series([])
                           for value in actual_personality.values()})
     __pd_structure.update(
-        {"personality_cat": pd.Series([], dtype=pd.StringDtype())})
+        {"Type": pd.Series([], dtype=pd.StringDtype())})
+
     data_result = pd.DataFrame().from_dict(__pd_structure)
-    for resume in get_text(file_names):
-        dataFrame = Predictor(file_names, resume)
+    for resume, file_name in zip(get_text(file_names), file_names):
+        dataFrame = Predictor(file_name, resume)
         data_result = pd.concat([data_result, dataFrame.data_result])
 
+    io.StringIO(data_result.to_csv(index=False))
     return json.loads(data_result.to_json(orient="split"))
 
 
@@ -65,7 +70,6 @@ ROOT_DIR = "temp"
 def predictor(request):
     try:
         if request.method == "POST":
-            # root_dir = "tempDir"
             per_prob = ""
             if not request.session.has_key("pc-id"):
                 request.session.flush()
@@ -75,13 +79,13 @@ def predictor(request):
                 files = dict(request.FILES)["files"]
                 dir = ospath.join(ROOT_DIR, f"{uuid}")
                 file_names = save_files(files, dir)
-                per_prob = predict_per(file_names)
+                per_prob = predict_per(file_names, dir)
             elif request.session.has_key("pc-id"):
                 session_value = request.session["pc-id"]
                 dir = ospath.join(ROOT_DIR, session_value)
-                media_root = ospath.join(settings.MEDIA_ROOT, dir)
-                file_names = [ospath.join(dir, f) for f in listdir(media_root)]
-                per_prob = predict_per(file_names)
+                data_floc = ospath.join(settings.MEDIA_ROOT, dir, "data.csv")
+                df = pd.read_csv(data_floc, index_col=0)
+                per_prob = json.loads(df.to_json(orient="split"))
 
         return Response(per_prob, status=status.HTTP_200_OK)
     except Exception as e:
