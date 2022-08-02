@@ -1,21 +1,19 @@
-import io
-from operator import index
-from textwrap import indent
-from tracemalloc import start
 from uuid import uuid4
+
+# django rest framework
+
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .serializer import *
+
+
 from django.conf import settings
 from django.core.files.storage import default_storage
 import fitz
 from os import path as ospath, listdir, system
 from .prediction import Predictor
 import pandas as pd
-from django.views.decorators.csrf import csrf_exempt
 import json
-import csv
 
 
 # Create your views here.
@@ -59,7 +57,6 @@ def predict_per(file_names, dir):
         dataFrame = Predictor(file_name, resume)
         data_result = pd.concat([data_result, dataFrame.data_result])
 
-    io.StringIO(data_result.to_csv(index=False))
     return json.loads(data_result.to_json(orient="split"))
 
 
@@ -71,41 +68,45 @@ def predictor(request):
     try:
         if request.method == "POST":
             per_prob = ""
-            if not request.session.has_key("pc-id"):
-                request.session.flush()
-                uuid = str(uuid4())
-                request.session["pc-id"] = uuid
-                request.session.set_expiry(0)
-                files = dict(request.FILES)["files"]
-                dir = ospath.join(ROOT_DIR, f"{uuid}")
-                file_names = save_files(files, dir)
-                per_prob = predict_per(file_names, dir)
-            elif request.session.has_key("pc-id"):
-                session_value = request.session["pc-id"]
-                dir = ospath.join(ROOT_DIR, session_value)
-                data_floc = ospath.join(settings.MEDIA_ROOT, dir, "data.csv")
-                df = pd.read_csv(data_floc, index_col=0)
-                per_prob = json.loads(df.to_json(orient="split"))
+            if request.session.has_key("pc-id"):
+                clearSessionDeleteFiles(request)
+
+            request.session.flush()
+            uuid = str(uuid4())
+            request.session["pc-id"] = uuid
+            request.session.set_expiry(0)
+            files = dict(request.FILES)["files"]
+            dir = ospath.join(ROOT_DIR, f"{uuid}")
+            file_names = save_files(files, dir)
+            per_prob = predict_per(file_names, dir)
 
         return Response(per_prob, status=status.HTTP_200_OK)
     except Exception as e:
+        if request.session.has_key("pc-id"):
+            clearSessionDeleteFiles(request)
+
         print("=====> Error", e)
         return Response({"working": False}, status=status.HTTP_509_BANDWIDTH_LIMIT_EXCEEDED)
 
 
-@api_view(["POST"])
-def clearSession(request):
+def clearSessionDeleteFiles(request):
     res = {
         "error": True
     }
+    if request.session.has_key("pc-id"):
+        pc_id = request.session["pc-id"]
+        dir = ospath.join(settings.MEDIA_ROOT, ROOT_DIR, pc_id)
+        system(f"rm -rf {dir}")
+        request.session.flush()
+        res["error"] = False
+    return res
+
+
+@api_view(["POST"])
+def clearSession(request):
     try:
         if request.method == "POST":
-            if request.session.has_key("pc-id"):
-                pc_id = request.session["pc-id"]
-                dir = ospath.join(settings.MEDIA_ROOT, ROOT_DIR, pc_id)
-                system(f"rm -rf {dir}")
-                request.session.flush()
-                res["error"] = False
+            res = clearSessionDeleteFiles(request)
 
     except Exception as e:
         return Response({**res, "msg": "Server Side Error"}, status=status.HTTP_403_FORBIDDEN)
