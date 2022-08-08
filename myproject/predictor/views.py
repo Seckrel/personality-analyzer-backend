@@ -91,14 +91,13 @@ def predictor(request):
 
 def clearSessionDeleteFiles(request):
     res = {
-        "error": True
+        "error": False
     }
     if request.session.has_key("pc-id"):
         pc_id = request.session["pc-id"]
         dir = ospath.join(settings.MEDIA_ROOT, ROOT_DIR, pc_id)
         system(f"rm -rf {dir}")
         request.session.flush()
-        res["error"] = False
     return res
 
 
